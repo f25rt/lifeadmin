@@ -1,0 +1,7 @@
+# Overrides for running inside docker-compose (profile: docker).
+# Values come from environment variables set by docker-compose.yml.
+spring:
+  datasource:
+    url: ${SPRING_DATASOURCE_URL}
+    username: ${SPRING_DATASOURCE_USERNAME}
+    password: ${SPRING_DATASOURCE_PASSWORD}

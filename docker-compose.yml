@@ -1,0 +1,132 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: lifeadmin-postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-lifeadmin}
+      POSTGRES_USER: ${POSTGRES_USER:-lifeadmin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-lifeadmin}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - lifeadmin-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-lifeadmin} -d ${POSTGRES_DB:-lifeadmin}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks: [lifeadmin-net]
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: lifeadmin-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:-lifeadmin}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:-lifeadmin}
+    ports:
+      - "${RABBITMQ_PORT:-5672}:5672"
+      - "${RABBITMQ_MANAGEMENT_PORT:-15672}:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+    networks: [lifeadmin-net]
+
+  minio:
+    image: minio/minio:latest
+    container_name: lifeadmin-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-lifeadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-lifeadmin123}
+    ports:
+      - "${MINIO_API_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - lifeadmin-miniodata:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+    networks: [lifeadmin-net]
+
+  # One-shot: create the documents bucket on startup (private by default).
+  minio-init:
+    image: minio/mc:latest
+    container_name: lifeadmin-minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 ${MINIO_ROOT_USER:-lifeadmin} ${MINIO_ROOT_PASSWORD:-lifeadmin123} &&
+      mc mb --ignore-existing local/${MINIO_BUCKET:-lifeadmin-documents} &&
+      echo 'bucket ready';
+      "
+    networks: [lifeadmin-net]
+
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: lifeadmin-mailpit
+    ports:
+      - "${MAILPIT_SMTP_PORT:-1025}:1025"
+      - "${MAILPIT_UI_PORT:-8025}:8025"
+    networks: [lifeadmin-net]
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: lifeadmin-backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-lifeadmin}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-lifeadmin}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-lifeadmin}
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_USERNAME: ${RABBITMQ_DEFAULT_USER:-lifeadmin}
+      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_DEFAULT_PASS:-lifeadmin}
+      SPRING_MAIL_HOST: mailpit
+      SPRING_MAIL_PORT: 1025
+      LIFEADMIN_STORAGE_ENDPOINT: http://minio:9000
+      LIFEADMIN_STORAGE_ACCESS_KEY: ${MINIO_ROOT_USER:-lifeadmin}
+      LIFEADMIN_STORAGE_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-lifeadmin123}
+      LIFEADMIN_STORAGE_BUCKET: ${MINIO_BUCKET:-lifeadmin-documents}
+      LIFEADMIN_JWT_SECRET: ${LIFEADMIN_JWT_SECRET}
+      LIFEADMIN_JWT_ACCESS_TTL_MINUTES: ${LIFEADMIN_JWT_ACCESS_TTL_MINUTES:-30}
+      LIFEADMIN_JWT_REFRESH_TTL_DAYS: ${LIFEADMIN_JWT_REFRESH_TTL_DAYS:-14}
+      LIFEADMIN_JWT_ISSUER: ${LIFEADMIN_JWT_ISSUER:-lifeadmin}
+    ports:
+      - "${BACKEND_PORT:-8080}:8080"
+    networks: [lifeadmin-net]
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-/api/v1}
+    container_name: lifeadmin-frontend
+    depends_on:
+      - backend
+    ports:
+      - "${FRONTEND_PORT:-3000}:80"
+    networks: [lifeadmin-net]
+    profiles: [full]
+
+volumes:
+  lifeadmin-pgdata:
+  lifeadmin-miniodata:
+
+networks:
+  lifeadmin-net:
+    driver: bridge

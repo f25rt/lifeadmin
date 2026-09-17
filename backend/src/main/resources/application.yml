@@ -1,0 +1,129 @@
+spring:
+  application:
+    name: lifeadmin-backend
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/lifeadmin}
+    username: ${SPRING_DATASOURCE_USERNAME:lifeadmin}
+    password: ${SPRING_DATASOURCE_PASSWORD:lifeadmin}
+  jpa:
+    hibernate:
+      ddl-auto: validate          # Flyway owns the schema
+    open-in-view: false
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+        format_sql: false
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    locations: classpath:db/migration
+  jackson:
+    default-property-inclusion: non_null
+    serialization:
+      write-dates-as-timestamps: false
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 12MB
+  rabbitmq:
+    host: ${SPRING_RABBITMQ_HOST:localhost}
+    port: ${SPRING_RABBITMQ_PORT:5672}
+    username: ${SPRING_RABBITMQ_USERNAME:lifeadmin}
+    password: ${SPRING_RABBITMQ_PASSWORD:lifeadmin}
+    listener:
+      simple:
+        # Retry transient processing failures with backoff before dead-lettering (G4).
+        retry:
+          enabled: true
+          initial-interval: 2s
+          max-attempts: 3
+          multiplier: 2
+        default-requeue-rejected: false
+  mail:
+    host: ${SPRING_MAIL_HOST:localhost}
+    port: ${SPRING_MAIL_PORT:1025}
+
+server:
+  port: 8080
+  # NOTE: the /api/v1 prefix is applied via a controller path-prefix (see WebConfig), NOT a servlet
+  # context-path. This keeps the prefix consistent across MockMvc, security matchers, and production.
+  error:
+    include-message: always
+    include-binding-errors: always
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+  api-docs:
+    path: /v3/api-docs
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+lifeadmin:
+  jwt:
+    secret: ${LIFEADMIN_JWT_SECRET:dev-only-insecure-secret-change-me-please-32bytes-minimum!!}
+    access-ttl-minutes: ${LIFEADMIN_JWT_ACCESS_TTL_MINUTES:30}
+    refresh-ttl-days: ${LIFEADMIN_JWT_REFRESH_TTL_DAYS:14}
+    issuer: ${LIFEADMIN_JWT_ISSUER:lifeadmin}
+  plan:
+    # Default plan limits (G13). FREE is assigned on registration (D1).
+    free:
+      document-limit: 5
+      people-limit: 1
+      ai-extraction-enabled: true
+  storage:
+    # S3-compatible object storage. When 'endpoint' is unset (e.g. some tests) the S3 provider is
+    # inactive and an in-memory stub can be supplied. MinIO requires path-style access.
+    endpoint: ${LIFEADMIN_STORAGE_ENDPOINT:http://localhost:9000}
+    region: ${LIFEADMIN_STORAGE_REGION:us-east-1}
+    access-key: ${LIFEADMIN_STORAGE_ACCESS_KEY:lifeadmin}
+    secret-key: ${LIFEADMIN_STORAGE_SECRET_KEY:lifeadmin123}
+    bucket: ${LIFEADMIN_STORAGE_BUCKET:lifeadmin-documents}
+    path-style-access: true
+    presign-ttl-seconds: 300
+  upload:
+    max-file-size-bytes: 10485760      # 10 MB
+    max-pdf-pages: 15
+  messaging:
+    # RabbitMQ topology for async document processing (G4). A main work queue plus a dead-letter
+    # exchange/queue; messages that exhaust retries are dead-lettered and the document set FAILED.
+    document-exchange: lifeadmin.document
+    document-processing-queue: lifeadmin.document.processing
+    document-processing-routing-key: document.uploaded
+    dead-letter-exchange: lifeadmin.document.dlx
+    dead-letter-queue: lifeadmin.document.processing.dlq
+  ocr:
+    # OCR engine: 'stub' (default; keyless, filename-hint for images, real text for digital PDFs) or
+    # 'tesseract' (real OCR via Tess4J — native libs bundled by lept4j; needs a tessdata language
+    # file, bundled under resources/tessdata/eng.traineddata). datapath blank = auto-detect bundled.
+    provider: ${LIFEADMIN_OCR_PROVIDER:stub}
+    datapath: ${LIFEADMIN_OCR_DATAPATH:}
+    language: ${LIFEADMIN_OCR_LANGUAGE:eng}
+    pdf-render-dpi: ${LIFEADMIN_OCR_PDF_DPI:300}
+  ai:
+    provider: ${LIFEADMIN_AI_PROVIDER:stub}   # stub (keyless keyword extractor) — real model is a drop-in
+    # The stub reads REAL dates from the OCR text (DateTextParser). For ambiguous numeric dates like
+    # 03/04/2026, day-first=false means MM/DD (common on PH docs); set true for DD/MM.
+    date-day-first: ${LIFEADMIN_AI_DATE_DAY_FIRST:false}
+  email:
+    provider: ${LIFEADMIN_EMAIL_PROVIDER:smtp}   # smtp (Mailpit/prod) or log (no transport)
+    from: ${LIFEADMIN_EMAIL_FROM:no-reply@lifeadmin.local}
+  reminder:
+    # The scheduler polls for due reminders on this fixed delay (ms). ShedLock makes it
+    # multi-instance safe. send-at-hour is the local hour of day reminders fire (user timezone).
+    poll-interval-ms: 60000
+    send-at-hour: 9
+
+logging:
+  level:
+    com.lifeadmin: INFO
+    org.flywaydb: INFO

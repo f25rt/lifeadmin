@@ -1,0 +1,2 @@
+# Tesseract language data is binary — never apply text/EOL normalization.
+*.traineddata binary

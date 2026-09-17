@@ -1,0 +1,17 @@
+node_modules
+dist
+dist-ssr
+*.local
+.env
+.vite
+dev-dist
+
+.vscode/*
+!.vscode/extensions.json
+.idea
+*.suo
+*.sw?
+
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
