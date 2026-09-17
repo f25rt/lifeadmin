@@ -9,7 +9,15 @@ import java.nio.charset.StandardCharsets;
 
 import javax.imageio.ImageIO;
 
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+
+import java.util.Optional;
+
+import com.lifeadmin.admin.settings.AppSettingRepository;
+import com.lifeadmin.admin.settings.UploadRulesService;
 import com.lifeadmin.common.error.ValidationException;
+import com.lifeadmin.security.auth.CurrentUser;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -18,12 +26,20 @@ class FileValidatorTest {
 
     private FileValidator validator;
 
+    /** Builds a FileValidator whose rules come from code defaults (empty settings repo). */
+    private static FileValidator validatorWithDefaults(final long maxSize, final int maxPdfPages) {
+        final var props = new UploadProperties();
+        props.setMaxFileSizeBytes(maxSize);
+        props.setMaxPdfPages(maxPdfPages);
+        final var settingRepo = mock(AppSettingRepository.class);
+        when(settingRepo.findByKey(org.mockito.ArgumentMatchers.anyString())).thenReturn(Optional.empty());
+        final var rules = new UploadRulesService(settingRepo, props, mock(CurrentUser.class));
+        return new FileValidator(rules);
+    }
+
     @BeforeEach
     void setUp() {
-        final var props = new UploadProperties();
-        props.setMaxFileSizeBytes(10 * 1024 * 1024);
-        props.setMaxPdfPages(15);
-        validator = new FileValidator(props);
+        validator = validatorWithDefaults(10 * 1024 * 1024, 15);
     }
 
     private static byte[] pngBytes() throws Exception {
@@ -57,9 +73,7 @@ class FileValidatorTest {
 
     @Test
     void rejectsOversizedFile() throws Exception {
-        final var props = new UploadProperties();
-        props.setMaxFileSizeBytes(10); // tiny limit
-        final var tiny = new FileValidator(props);
+        final var tiny = validatorWithDefaults(10, 15); // tiny size limit via code default
         assertThatThrownBy(() -> tiny.validateAndNormalize(pngBytes(), "photo.png"))
                 .isInstanceOf(ValidationException.class)
                 .hasMessageContaining("maximum size");

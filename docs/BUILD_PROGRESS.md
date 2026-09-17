@@ -3,6 +3,27 @@
 Tracks implementation against the phased roadmap (`ROADMAP.md`). Each phase ends with a
 runnable, testable application.
 
+> ## ▶ Resume here (session checkpoint)
+> **Done so far:** Phases 1–4 + post-phase work: Tesseract OCR, real OCR date parsing, stricter date
+> extraction (decision 1b), reminder before/after direction, in-app confirm dialogs, and the full
+> **platform admin** (SUPER_ADMIN: overview, users, documents, upload rules, document types & AI
+> templates). Backend **49 tests green**; frontend `npm run build` green.
+>
+> **Run it again (from `backend/`):** set `JAVA_HOME` to JDK 21, then `mvn spring-boot:run` with:
+> `SPRING_DATASOURCE_URL=jdbc:postgresql://localhost:5433/lifeadmin`,
+> `LIFEADMIN_JWT_SECRET=<≥32 chars>`, `LIFEADMIN_STORAGE_ENABLED=false`,
+> `SPRING_RABBITMQ_USERNAME/PASSWORD=guest`, `LIFEADMIN_EMAIL_PROVIDER=log`,
+> `LIFEADMIN_OCR_PROVIDER=tesseract` (optional: `LIFEADMIN_REMINDER_POLL_INTERVAL_MS=10000` for demos).
+> Frontend: `npm run dev` (→ :3000). Postgres: `POSTGRES_PORT=5433 docker compose up -d postgres`;
+> RabbitMQ = existing `rabbitmq` container (guest/guest). Build/test require JDK 21 (machine default
+> `java` is JDK 8). Test user `juan@example.com` / `ChangeMe123!`; admin `admin@lifeadmin.local` /
+> `ChangeMeAdmin123!`.
+>
+> **Next up (agreed):** admin ability to **promote/demote a user's role** (and optionally
+> disable/enable an account) from the Users page. Then Phase 5 (search, mobile polish, hardening,
+> usage limits). Optional backlog: dynamic document-type *codes*; real AI field extraction; provenance
+> "read from …" labels on the review screen (decision 2).
+
 | Phase | Scope | Status |
 |-------|-------|--------|
 | 0 | Pre-implementation deliverables (architecture, ERD, API, structure, roadmap) | Done |
@@ -267,6 +288,52 @@ mislabeled) important dates. Now it's conservative:
 > The low-confidence value (< 0.5) is the signal the review UI can use to prompt "please confirm this
 > date". Surfacing that hint visually (and a "read from …" provenance label) is decision 2 — not done
 > yet; this change is decision 1b only.
+
+## Platform admin (SUPER_ADMIN) — users, documents, upload rules, document types & AI templates
+
+A cross-account platform administrator, gated behind a new **SUPER_ADMIN** role, with a dedicated
+admin section in the UI. Built in phases; everything is admin-editable at runtime (no redeploy).
+
+**Backend:**
+- **Role & seed:** `UserRole.SUPER_ADMIN`; Flyway `V5` widens the user-role CHECK. `AdminSeeder`
+  (an `ApplicationRunner`) creates the admin account/user/subscription at startup **only if missing**
+  (idempotent), hashing the password with the app `PasswordEncoder` — no bcrypt hash or password in
+  SQL. Credentials via `lifeadmin.admin.{email,password,name}` (env-overridable; default
+  `admin@lifeadmin.local` / `ChangeMeAdmin123!` for dev).
+- **Authorization:** `SecurityConfig` restricts `/api/v1/admin/**` to `hasRole('SUPER_ADMIN')`; the
+  role flows through the JWT claim → `ROLE_SUPER_ADMIN` authority. Regular users get 403, anonymous 401.
+- **Read dashboards** (`AdminService`/`AdminController`): `GET /admin/overview` (users, accounts,
+  documents, active/processing/failed counts), `GET /admin/users` (each with their document count),
+  `GET /admin/documents?accountId=&page=` (cross-account browser, paged).
+- **Upload rules** (`AppSetting` key/value table `V6` + `UploadRulesService`): admin-editable allowed
+  MIME types (restricted to what the pipeline supports), max file size, max PDF pages. `FileValidator`
+  reads these at request time; unset → code defaults (`UploadProperties`). `GET/PUT
+  /admin/settings/upload`.
+- **Document types + AI templates** (`document_type_config` table `V7`, seeded from the enum):
+  per-type `enabled` flag, display `label`, classification `keywords`, `relevant_date_types`, and
+  `default_offsets_days`. `DocumentTypeConfigService` is now the single source the AI classifier and
+  primary-date logic read — `StubAiExtractionProvider` classifies via `typeConfig.classify()` and
+  picks the primary date from the configured relevant types. `GET /admin/document-types` +
+  `PATCH /admin/document-types/{code}`.
+- **Tests: 49 green** (adds `AdminApiIntegrationTest`: 403/401 authorization, overview, users, upload
+  rules incl. validation + restore-to-defaults, document-type edits; `FileValidatorTest` and
+  `StubAiExtractionProviderTest` updated for the new collaborators).
+
+**Frontend:**
+- `AdminRoute` guard (auth + SUPER_ADMIN); an **Admin** button in the app header shown only to admins;
+  a dark admin shell (`AdminLayout`) with sub-nav.
+- Pages: **Overview** (stat tiles), **Users** (table + per-user doc count linking to a filtered doc
+  view), **Documents** (paged cross-account browser), **Upload rules** (file-type checkboxes + size +
+  PDF pages), **Document types & AI** (per-type editor: label, enabled, keywords, relevant date types,
+  default offsets). `admin` API module + types. `npm run build` green.
+
+**Verified end-to-end (live):** admin login → overview/users/documents; set uploads to **PDF-only** →
+a PNG upload was rejected (HTTP 400) → restored; added keyword `kontrata` to the CONTRACT type → an
+image reading "KONTRATA" was OCR-classified as **CONTRACT** (proving the classifier reads the
+admin-edited template at runtime) → restored.
+
+> Security note: the default admin password is for local/dev only — set `LIFEADMIN_ADMIN_PASSWORD`
+> per environment. Self-registration always creates OWNER; SUPER_ADMIN is only seeded or promoted.
 
 ## Notes / decisions carried from planning
 - Local builds require **JDK 21** on `JAVA_HOME` (machine default `java` is JDK 8). Maven 3.8.6.

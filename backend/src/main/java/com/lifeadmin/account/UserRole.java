@@ -5,6 +5,8 @@ package com.lifeadmin.account;
  * account/role model is future-proof for family/business workspaces (GAPS_AND_DECISIONS D5/G12).
  */
 public enum UserRole {
+    /** Platform administrator (cross-account). Not created by self-registration; seeded/promoted. */
+    SUPER_ADMIN,
     OWNER,
     ADMIN,
     MEMBER,

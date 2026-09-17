@@ -1,16 +1,50 @@
 package com.lifeadmin.provider.ai;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.mock;
 
+import java.util.Set;
+
+import com.lifeadmin.admin.doctype.DocumentTypeConfigService;
 import com.lifeadmin.document.DocumentType;
 import com.lifeadmin.extraction.DateType;
 import com.lifeadmin.extraction.FieldSource;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 class StubAiExtractionProviderTest {
 
-    private final StubAiExtractionProvider provider = new StubAiExtractionProvider(false);
+    private final DocumentTypeConfigService typeConfig = mock(DocumentTypeConfigService.class);
+    private final StubAiExtractionProvider provider = new StubAiExtractionProvider(false, typeConfig);
+
+    @BeforeEach
+    void setUpClassifier() {
+        // Reproduce the seeded keyword classification the DB config would provide.
+        lenient().when(typeConfig.classify(any())).thenAnswer(inv -> {
+            final String h = inv.getArgument(0);
+            if (h.contains("passport")) return DocumentType.PASSPORT;
+            if (h.contains("driver") || h.contains("license") || h.contains("licence")) return DocumentType.DRIVERS_LICENSE;
+            if (h.contains("registration") || h.contains("vehicle") || h.contains("plate")) return DocumentType.VEHICLE_REGISTRATION;
+            if (h.contains("insurance") || h.contains("policy") || h.contains("insur")) return DocumentType.INSURANCE;
+            if (h.contains("warranty")) return DocumentType.WARRANTY;
+            if (h.contains("receipt") || h.contains("invoice")) return DocumentType.RECEIPT;
+            if (h.contains("contract") || h.contains("agreement") || h.contains("lease")) return DocumentType.CONTRACT;
+            if (h.contains("bill") || h.contains("statement") || h.contains("amount due")) return DocumentType.BILL;
+            if (h.contains("subscription")) return DocumentType.SUBSCRIPTION;
+            if (h.contains("certificate")) return DocumentType.CERTIFICATE;
+            return DocumentType.OTHER;
+        });
+        // Relevant date types per the seed. Register the general default FIRST, then the specific
+        // overrides, so Mockito's "last matching stub wins" resolves the specific ones correctly.
+        lenient().when(typeConfig.relevantDateTypes(any())).thenReturn(Set.of());
+        lenient().when(typeConfig.relevantDateTypes(DocumentType.INSURANCE))
+                .thenReturn(new java.util.LinkedHashSet<>(java.util.List.of(DateType.EXPIRATION, DateType.RENEWAL)));
+        lenient().when(typeConfig.relevantDateTypes(DocumentType.WARRANTY))
+                .thenReturn(new java.util.LinkedHashSet<>(java.util.List.of(DateType.WARRANTY_EXPIRATION, DateType.PURCHASE)));
+    }
 
     @Test
     void classifiesInsuranceFromKeyword() {

@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AppHeader } from '../components/AppHeader';
@@ -5,11 +6,13 @@ import { StatusBadge, formatBytes } from '../components/StatusBadge';
 import { documentsApi } from '../api/documents';
 import { errorMessage } from '../api/client';
 import { ReminderForm } from '../components/ReminderForm';
+import { ConfirmDialog } from '../components/ConfirmDialog';
 
 export function DocumentDetailPage() {
   const { id = '' } = useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const { data: doc, isLoading, error } = useQuery({
     queryKey: ['documents', id],
@@ -143,11 +146,7 @@ export function DocumentDetailPage() {
                 </button>
               )}
               <button
-                onClick={() => {
-                  if (window.confirm('Permanently delete this document? This cannot be undone.')) {
-                    remove.mutate();
-                  }
-                }}
+                onClick={() => setConfirmDelete(true)}
                 disabled={remove.isPending}
                 className="rounded-lg border border-red-300 px-4 py-2 text-sm text-red-700 hover:bg-red-50 disabled:opacity-60"
               >
@@ -157,6 +156,17 @@ export function DocumentDetailPage() {
           </>
         )}
       </main>
+
+      <ConfirmDialog
+        open={confirmDelete}
+        title="Delete document"
+        message="This permanently deletes the document and its files. This cannot be undone."
+        confirmLabel="Delete"
+        destructive
+        busy={remove.isPending}
+        onConfirm={() => remove.mutate()}
+        onCancel={() => setConfirmDelete(false)}
+      />
     </div>
   );
 }

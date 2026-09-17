@@ -20,4 +20,15 @@ public interface DocumentRepository extends JpaRepository<Document, UUID> {
     long countByAccountIdAndStatusNot(UUID accountId, DocumentStatus status);
 
     long countByAccountIdAndStatus(UUID accountId, DocumentStatus status);
+
+    // --- Admin (cross-account) ---
+
+    long countByAccountId(UUID accountId);
+
+    long countByStatus(DocumentStatus status);
+
+    /** All documents, newest first, for the admin browser. */
+    Page<Document> findAllByOrderByCreatedAtDesc(Pageable pageable);
+
+    Page<Document> findByAccountIdOrderByCreatedAtDesc(UUID accountId, Pageable pageable);
 }

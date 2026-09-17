@@ -38,17 +38,22 @@ public class StubAiExtractionProvider implements AiExtractionProvider {
      */
     private final boolean dayFirst;
 
+    /** Admin-configurable type keywords / relevant date types / labels (V7). */
+    private final com.lifeadmin.admin.doctype.DocumentTypeConfigService typeConfig;
+
     public StubAiExtractionProvider(
             @org.springframework.beans.factory.annotation.Value("${lifeadmin.ai.date-day-first:false}")
-            final boolean dayFirst) {
+            final boolean dayFirst,
+            final com.lifeadmin.admin.doctype.DocumentTypeConfigService typeConfig) {
         this.dayFirst = dayFirst;
+        this.typeConfig = typeConfig;
     }
 
     @Override
     public ExtractionResult classifyAndExtract(final String text, final String fileName) {
         final var haystack = ((text == null ? "" : text) + " " + (fileName == null ? "" : fileName))
                 .toLowerCase(Locale.ROOT);
-        final var type = classify(haystack);
+        final var type = typeConfig.classify(haystack);
         final var fields = new ArrayList<ExtractedFieldResult>();
         final var dates = new ArrayList<ImportantDateResult>();
         final var actions = new ArrayList<String>();
@@ -182,8 +187,15 @@ public class StubAiExtractionProvider implements AiExtractionProvider {
                         .max(java.util.Comparator.comparing(DateTextParser.FoundDate::value)));
     }
 
-    /** The date a document of this type most likely carries, used when the text gives no keyword. */
-    private static DateType primaryDateType(final DocumentType type) {
+    /**
+     * The date a document of this type most likely carries, used when the text gives no keyword.
+     * Prefers the admin-configured relevant date types (first one); falls back to a built-in default.
+     */
+    private DateType primaryDateType(final DocumentType type) {
+        final var configured = typeConfig.relevantDateTypes(type);
+        if (!configured.isEmpty()) {
+            return configured.iterator().next();
+        }
         return switch (type) {
             case PASSPORT, DRIVERS_LICENSE, INSURANCE, VEHICLE_REGISTRATION, LICENSE, CERTIFICATE,
                  GOVERNMENT_DOCUMENT, PROPERTY_DOCUMENT -> DateType.EXPIRATION;
@@ -192,29 +204,6 @@ public class StubAiExtractionProvider implements AiExtractionProvider {
             case BILL, SUBSCRIPTION -> DateType.PAYMENT_DEADLINE;
             default -> DateType.OTHER;
         };
-    }
-
-    private DocumentType classify(final String haystack) {
-        if (contains(haystack, "passport")) return DocumentType.PASSPORT;
-        if (contains(haystack, "driver", "license", "licence")) return DocumentType.DRIVERS_LICENSE;
-        if (contains(haystack, "registration", "vehicle", "ltop", "plate")) return DocumentType.VEHICLE_REGISTRATION;
-        if (contains(haystack, "insurance", "policy", "insur")) return DocumentType.INSURANCE;
-        if (contains(haystack, "warranty")) return DocumentType.WARRANTY;
-        if (contains(haystack, "receipt", "official receipt", "invoice")) return DocumentType.RECEIPT;
-        if (contains(haystack, "contract", "agreement", "lease")) return DocumentType.CONTRACT;
-        if (contains(haystack, "bill", "statement", "amount due")) return DocumentType.BILL;
-        if (contains(haystack, "subscription")) return DocumentType.SUBSCRIPTION;
-        if (contains(haystack, "certificate")) return DocumentType.CERTIFICATE;
-        return DocumentType.OTHER;
-    }
-
-    private static boolean contains(final String haystack, final String... needles) {
-        for (final var n : needles) {
-            if (haystack.contains(n)) {
-                return true;
-            }
-        }
-        return false;
     }
 
     private static ExtractedFieldResult field(final String name, final String value, final BigDecimal conf) {

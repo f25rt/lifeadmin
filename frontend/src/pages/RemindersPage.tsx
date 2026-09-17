@@ -1,6 +1,8 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AppHeader } from '../components/AppHeader';
+import { ConfirmDialog } from '../components/ConfirmDialog';
 import { remindersApi } from '../api/reminders';
 import { errorMessage } from '../api/client';
 import type { ReminderResponse } from '../api/types';
@@ -12,8 +14,13 @@ const STATUS_STYLES: Record<string, string> = {
   FAILED: 'bg-red-50 text-red-700',
 };
 
+/** A confirmable action on a specific reminder. */
+type PendingAction = { kind: 'cancel' | 'delete'; reminder: ReminderResponse } | null;
+
 export function RemindersPage() {
   const queryClient = useQueryClient();
+  const [pending, setPending] = useState<PendingAction>(null);
+
   const { data, isLoading, error } = useQuery({
     queryKey: ['reminders', 'all'],
     queryFn: () => remindersApi.list(false),
@@ -21,17 +28,30 @@ export function RemindersPage() {
 
   const cancel = useMutation({
     mutationFn: (id: string) => remindersApi.update(id, { cancel: true }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['reminders'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['reminders'] });
+      setPending(null);
+    },
   });
 
   const remove = useMutation({
     mutationFn: (id: string) => remindersApi.remove(id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['reminders'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['reminders'] });
+      setPending(null);
+    },
   });
 
   const reminders = data ?? [];
   const scheduled = reminders.filter((r) => r.status === 'SCHEDULED');
   const others = reminders.filter((r) => r.status !== 'SCHEDULED');
+
+  const busy = cancel.isPending || remove.isPending;
+  const confirmAction = () => {
+    if (!pending) return;
+    if (pending.kind === 'cancel') cancel.mutate(pending.reminder.id);
+    else remove.mutate(pending.reminder.id);
+  };
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -58,13 +78,38 @@ export function RemindersPage() {
           </div>
         ) : (
           <div className="mt-8 space-y-8">
-            <Section title="Upcoming" items={scheduled} onCancel={(id) => cancel.mutate(id)} onDelete={(id) => remove.mutate(id)} />
+            <Section
+              title="Upcoming"
+              items={scheduled}
+              onRequestCancel={(r) => setPending({ kind: 'cancel', reminder: r })}
+              onRequestDelete={(r) => setPending({ kind: 'delete', reminder: r })}
+            />
             {others.length > 0 && (
-              <Section title="Past & cancelled" items={others} onDelete={(id) => remove.mutate(id)} />
+              <Section
+                title="Past & cancelled"
+                items={others}
+                onRequestDelete={(r) => setPending({ kind: 'delete', reminder: r })}
+              />
             )}
           </div>
         )}
       </main>
+
+      <ConfirmDialog
+        open={pending !== null}
+        title={pending?.kind === 'cancel' ? 'Cancel reminder' : 'Delete reminder'}
+        message={
+          pending?.kind === 'cancel'
+            ? `Stop the reminder "${pending?.reminder.title}"? It won't be sent, but stays in your history.`
+            : `Delete the reminder "${pending?.reminder.title}"? This cannot be undone.`
+        }
+        confirmLabel={pending?.kind === 'cancel' ? 'Cancel reminder' : 'Delete'}
+        cancelLabel="Keep"
+        destructive={pending?.kind === 'delete'}
+        busy={busy}
+        onConfirm={confirmAction}
+        onCancel={() => setPending(null)}
+      />
     </div>
   );
 }
@@ -72,13 +117,13 @@ export function RemindersPage() {
 function Section({
   title,
   items,
-  onCancel,
-  onDelete,
+  onRequestCancel,
+  onRequestDelete,
 }: {
   title: string;
   items: ReminderResponse[];
-  onCancel?: (id: string) => void;
-  onDelete: (id: string) => void;
+  onRequestCancel?: (r: ReminderResponse) => void;
+  onRequestDelete: (r: ReminderResponse) => void;
 }) {
   if (items.length === 0) return null;
   return (
@@ -102,18 +147,16 @@ function Section({
               <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${STATUS_STYLES[r.status] ?? 'bg-slate-100 text-slate-600'}`}>
                 {r.status.toLowerCase()}
               </span>
-              {onCancel && r.status === 'SCHEDULED' && (
+              {onRequestCancel && r.status === 'SCHEDULED' && (
                 <button
-                  onClick={() => onCancel(r.id)}
+                  onClick={() => onRequestCancel(r)}
                   className="rounded-md border border-slate-300 px-2.5 py-1 text-xs text-slate-700 hover:bg-slate-100"
                 >
                   Cancel
                 </button>
               )}
               <button
-                onClick={() => {
-                  if (window.confirm('Delete this reminder?')) onDelete(r.id);
-                }}
+                onClick={() => onRequestDelete(r)}
                 className="rounded-md border border-red-300 px-2.5 py-1 text-xs text-red-700 hover:bg-red-50"
               >
                 Delete

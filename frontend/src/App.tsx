@@ -9,6 +9,12 @@ import { UploadPage } from './pages/UploadPage';
 import { DocumentDetailPage } from './pages/DocumentDetailPage';
 import { DocumentReviewPage } from './pages/DocumentReviewPage';
 import { RemindersPage } from './pages/RemindersPage';
+import { AdminRoute } from './auth/AdminRoute';
+import { AdminOverviewPage } from './pages/admin/AdminOverviewPage';
+import { AdminUsersPage } from './pages/admin/AdminUsersPage';
+import { AdminDocumentsPage } from './pages/admin/AdminDocumentsPage';
+import { AdminUploadRulesPage } from './pages/admin/AdminUploadRulesPage';
+import { AdminDocumentTypesPage } from './pages/admin/AdminDocumentTypesPage';
 
 export default function App() {
   return (
@@ -64,6 +70,11 @@ export default function App() {
           </ProtectedRoute>
         }
       />
+      <Route path="/admin" element={<AdminRoute><AdminOverviewPage /></AdminRoute>} />
+      <Route path="/admin/users" element={<AdminRoute><AdminUsersPage /></AdminRoute>} />
+      <Route path="/admin/documents" element={<AdminRoute><AdminDocumentsPage /></AdminRoute>} />
+      <Route path="/admin/upload-rules" element={<AdminRoute><AdminUploadRulesPage /></AdminRoute>} />
+      <Route path="/admin/document-types" element={<AdminRoute><AdminDocumentTypesPage /></AdminRoute>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

@@ -117,6 +117,12 @@ lifeadmin:
   email:
     provider: ${LIFEADMIN_EMAIL_PROVIDER:smtp}   # smtp (Mailpit/prod) or log (no transport)
     from: ${LIFEADMIN_EMAIL_FROM:no-reply@lifeadmin.local}
+  admin:
+    # Seeded platform administrator (SUPER_ADMIN). Created at startup if missing (AdminSeeder).
+    # CHANGE THE PASSWORD per environment — the default is for local/dev only.
+    email: ${LIFEADMIN_ADMIN_EMAIL:admin@lifeadmin.local}
+    password: ${LIFEADMIN_ADMIN_PASSWORD:ChangeMeAdmin123!}
+    name: ${LIFEADMIN_ADMIN_NAME:Platform Admin}
   reminder:
     # The scheduler polls for due reminders on this fixed delay (ms). ShedLock makes it
     # multi-instance safe. send-at-hour is the local hour of day reminders fire (user timezone).

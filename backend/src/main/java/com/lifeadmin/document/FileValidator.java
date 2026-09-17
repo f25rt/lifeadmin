@@ -7,6 +7,7 @@ import java.util.Set;
 
 import javax.imageio.ImageIO;
 
+import com.lifeadmin.admin.settings.UploadRulesService;
 import com.lifeadmin.common.error.ValidationException;
 
 import lombok.RequiredArgsConstructor;
@@ -38,12 +39,11 @@ public class FileValidator {
     private static final String PDF = "application/pdf";
     private static final String JPEG = "image/jpeg";
     private static final String PNG = "image/png";
-    private static final Set<String> ALLOWED = Set.of(PDF, JPEG, PNG);
     // Detected MIME -> ImageIO writer format name.
     private static final Map<String, String> IMAGE_FORMAT = Map.of(JPEG, "jpg", PNG, "png");
 
     private final Tika tika = new Tika();
-    private final UploadProperties properties;
+    private final UploadRulesService uploadRules;
 
     public record Result(String mimeType, byte[] storedBytes) {
     }
@@ -52,15 +52,18 @@ public class FileValidator {
         if (content == null || content.length == 0) {
             throw new ValidationException("VALIDATION_ERROR", "Uploaded file is empty");
         }
-        if (content.length > properties.getMaxFileSizeBytes()) {
+        // Admin-configurable limits (fall back to code defaults when unset).
+        final long maxSize = uploadRules.maxFileSizeBytes();
+        final Set<String> allowed = uploadRules.allowedMimeTypes();
+        if (content.length > maxSize) {
             throw new ValidationException("PAYLOAD_TOO_LARGE",
-                    "File exceeds the maximum size of " + properties.getMaxFileSizeBytes() + " bytes");
+                    "File exceeds the maximum size of " + maxSize + " bytes");
         }
 
         final var detected = tika.detect(content);
-        if (!ALLOWED.contains(detected)) {
+        if (!allowed.contains(detected)) {
             throw new ValidationException("UNSUPPORTED_MEDIA_TYPE",
-                    "Unsupported file type '" + detected + "'. Allowed: JPG, PNG, PDF");
+                    "Unsupported file type '" + detected + "'. Allowed: " + allowed);
         }
 
         if (PDF.equals(detected)) {
@@ -79,9 +82,10 @@ public class FileValidator {
             if (pages < 1) {
                 throw new ValidationException("VALIDATION_ERROR", "PDF has no pages");
             }
-            if (pages > properties.getMaxPdfPages()) {
+            final int maxPdfPages = uploadRules.maxPdfPages();
+            if (pages > maxPdfPages) {
                 throw new ValidationException("VALIDATION_ERROR",
-                        "PDF has " + pages + " pages; the maximum is " + properties.getMaxPdfPages());
+                        "PDF has " + pages + " pages; the maximum is " + maxPdfPages);
             }
         } catch (final ValidationException e) {
             throw e;

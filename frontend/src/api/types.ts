@@ -245,3 +245,54 @@ export interface DashboardResponse {
   upcoming: UpcomingDate[];
   needsAttention: AttentionItem[];
 }
+
+// --- Admin (platform SUPER_ADMIN) ---
+export interface AdminOverview {
+  totalUsers: number;
+  totalAccounts: number;
+  totalDocuments: number;
+  documentsActive: number;
+  documentsProcessing: number;
+  documentsFailed: number;
+}
+
+export interface AdminUserRow {
+  id: string;
+  email: string;
+  name: string;
+  role: string;
+  accountId: string;
+  timezone: string;
+  country: string;
+  documentCount: number;
+  createdAt: string;
+}
+
+export interface AdminDocumentRow {
+  id: string;
+  title: string;
+  fileName: string;
+  documentType: string | null;
+  status: DocumentStatus;
+  fileSize: number;
+  accountId: string;
+  uploadedByUserId: string;
+  createdAt: string;
+}
+
+export interface UploadRulesView {
+  allowedMimeTypes: string[];
+  supportedMimeTypes: string[];
+  maxFileSizeBytes: number;
+  maxPdfPages: number;
+}
+
+export interface DocumentTypeView {
+  typeCode: string;
+  label: string;
+  enabled: boolean;
+  keywords: string;
+  relevantDateTypes: string;
+  defaultOffsetsDays: string;
+  sortOrder: number;
+}

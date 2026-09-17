@@ -41,6 +41,14 @@ export function AppHeader() {
           </nav>
         </div>
         <div className="flex items-center gap-2 sm:gap-3">
+          {user?.role === 'SUPER_ADMIN' && (
+            <Link
+              to="/admin"
+              className="rounded-lg bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-700"
+            >
+              Admin
+            </Link>
+          )}
           <NotificationBell />
           <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">
             {user?.plan}

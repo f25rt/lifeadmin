@@ -60,6 +60,9 @@ public class SecurityConfig {
                                 "/actuator/health", "/actuator/health/**",
                                 "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html")
                         .permitAll()
+                        // Platform admin API — cross-account; restricted to SUPER_ADMIN. The /api/v1
+                        // prefix is applied to @RestControllers via WebConfig, so match it here too.
+                        .requestMatchers("/api/v1/admin/**").hasRole("SUPER_ADMIN")
                         .anyRequest().authenticated())
                 .exceptionHandling(ex -> ex
                         .authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED)))
