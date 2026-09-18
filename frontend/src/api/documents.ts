@@ -5,15 +5,16 @@ import type {
   DocumentSummary,
   DownloadUrlResponse,
   Page,
+  TypeOption,
   UploadResponse,
   VerifyRequest,
 } from './types';
 
 export const documentsApi = {
-  list: (page = 0, size = 20, status?: DocumentStatus) =>
+  list: (page = 0, size = 20, status?: DocumentStatus, q?: string) =>
     api
       .get<Page<DocumentSummary>>('/documents', {
-        params: { page, size, ...(status ? { status } : {}) },
+        params: { page, size, ...(status ? { status } : {}), ...(q ? { q } : {}) },
       })
       .then((r) => r.data),
 
@@ -46,4 +47,7 @@ export const documentsApi = {
     api.post<DocumentDetail>(`/documents/${id}/verify`, body).then((r) => r.data),
 
   reprocess: (id: string) => api.post(`/documents/${id}/process`).then(() => undefined),
+
+  /** Enabled document types (code + label) for the type picker, incl. admin-created ones. */
+  types: () => api.get<TypeOption[]>('/documents/types').then((r) => r.data),
 };

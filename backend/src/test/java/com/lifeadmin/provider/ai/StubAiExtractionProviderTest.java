@@ -25,31 +25,31 @@ class StubAiExtractionProviderTest {
         // Reproduce the seeded keyword classification the DB config would provide.
         lenient().when(typeConfig.classify(any())).thenAnswer(inv -> {
             final String h = inv.getArgument(0);
-            if (h.contains("passport")) return DocumentType.PASSPORT;
-            if (h.contains("driver") || h.contains("license") || h.contains("licence")) return DocumentType.DRIVERS_LICENSE;
-            if (h.contains("registration") || h.contains("vehicle") || h.contains("plate")) return DocumentType.VEHICLE_REGISTRATION;
-            if (h.contains("insurance") || h.contains("policy") || h.contains("insur")) return DocumentType.INSURANCE;
-            if (h.contains("warranty")) return DocumentType.WARRANTY;
-            if (h.contains("receipt") || h.contains("invoice")) return DocumentType.RECEIPT;
-            if (h.contains("contract") || h.contains("agreement") || h.contains("lease")) return DocumentType.CONTRACT;
-            if (h.contains("bill") || h.contains("statement") || h.contains("amount due")) return DocumentType.BILL;
-            if (h.contains("subscription")) return DocumentType.SUBSCRIPTION;
-            if (h.contains("certificate")) return DocumentType.CERTIFICATE;
-            return DocumentType.OTHER;
+            if (h.contains("passport")) return DocumentType.PASSPORT.name();
+            if (h.contains("driver") || h.contains("license") || h.contains("licence")) return DocumentType.DRIVERS_LICENSE.name();
+            if (h.contains("registration") || h.contains("vehicle") || h.contains("plate")) return DocumentType.VEHICLE_REGISTRATION.name();
+            if (h.contains("insurance") || h.contains("policy") || h.contains("insur")) return DocumentType.INSURANCE.name();
+            if (h.contains("warranty")) return DocumentType.WARRANTY.name();
+            if (h.contains("receipt") || h.contains("invoice")) return DocumentType.RECEIPT.name();
+            if (h.contains("contract") || h.contains("agreement") || h.contains("lease")) return DocumentType.CONTRACT.name();
+            if (h.contains("bill") || h.contains("statement") || h.contains("amount due")) return DocumentType.BILL.name();
+            if (h.contains("subscription")) return DocumentType.SUBSCRIPTION.name();
+            if (h.contains("certificate")) return DocumentType.CERTIFICATE.name();
+            return DocumentType.OTHER.name();
         });
         // Relevant date types per the seed. Register the general default FIRST, then the specific
         // overrides, so Mockito's "last matching stub wins" resolves the specific ones correctly.
         lenient().when(typeConfig.relevantDateTypes(any())).thenReturn(Set.of());
-        lenient().when(typeConfig.relevantDateTypes(DocumentType.INSURANCE))
+        lenient().when(typeConfig.relevantDateTypes(DocumentType.INSURANCE.name()))
                 .thenReturn(new java.util.LinkedHashSet<>(java.util.List.of(DateType.EXPIRATION, DateType.RENEWAL)));
-        lenient().when(typeConfig.relevantDateTypes(DocumentType.WARRANTY))
+        lenient().when(typeConfig.relevantDateTypes(DocumentType.WARRANTY.name()))
                 .thenReturn(new java.util.LinkedHashSet<>(java.util.List.of(DateType.WARRANTY_EXPIRATION, DateType.PURCHASE)));
     }
 
     @Test
     void classifiesInsuranceFromKeyword() {
         final var result = provider.classifyAndExtract("ABC Insurance policy number INS-123456", "scan.pdf");
-        assertThat(result.documentType()).isEqualTo(DocumentType.INSURANCE);
+        assertThat(result.documentType()).isEqualTo(DocumentType.INSURANCE.name());
         assertThat(result.classificationConfidence()).isNotNull();
         assertThat(result.fields()).isNotEmpty();
         assertThat(result.dates()).anyMatch(d -> d.dateType() == DateType.EXPIRATION);
@@ -59,13 +59,13 @@ class StubAiExtractionProviderTest {
     @Test
     void classifiesFromFileNameWhenTextIsBlank() {
         final var result = provider.classifyAndExtract("", "my_passport_scan.jpg");
-        assertThat(result.documentType()).isEqualTo(DocumentType.PASSPORT);
+        assertThat(result.documentType()).isEqualTo(DocumentType.PASSPORT.name());
     }
 
     @Test
     void warrantyProducesADerivedExpirationDate() {
         final var result = provider.classifyAndExtract("Samsung refrigerator warranty", "receipt.jpg");
-        assertThat(result.documentType()).isEqualTo(DocumentType.WARRANTY);
+        assertThat(result.documentType()).isEqualTo(DocumentType.WARRANTY.name());
         // Derived warranty expiration must be marked DERIVED (spec §9).
         assertThat(result.dates())
                 .anyMatch(d -> d.dateType() == DateType.WARRANTY_EXPIRATION && d.source() == FieldSource.DERIVED);
@@ -80,7 +80,7 @@ class StubAiExtractionProviderTest {
     @Test
     void unknownContentIsClassifiedOtherWithLowConfidence() {
         final var result = provider.classifyAndExtract("random gibberish xyz", "file.pdf");
-        assertThat(result.documentType()).isEqualTo(DocumentType.OTHER);
+        assertThat(result.documentType()).isEqualTo(DocumentType.OTHER.name());
         assertThat(result.classificationConfidence().doubleValue()).isLessThan(0.5);
     }
 
@@ -89,7 +89,7 @@ class StubAiExtractionProviderTest {
         final var text = "INSURANCE POLICY\nPolicy Number: INS-123456\nValid until 09/2026";
         final var result = provider.classifyAndExtract(text, "scan001.png");
 
-        assertThat(result.documentType()).isEqualTo(DocumentType.INSURANCE);
+        assertThat(result.documentType()).isEqualTo(DocumentType.INSURANCE.name());
         // The real date is read (Sep 2026 → last day of month) and marked OCR (came off the document).
         final var expiration = result.dates().stream()
                 .filter(d -> d.dateType() == DateType.EXPIRATION).findFirst().orElseThrow();
@@ -104,7 +104,7 @@ class StubAiExtractionProviderTest {
                 + "Valid until 2027-03-31\nPrinted on 2026-01-06";
         final var result = provider.classifyAndExtract(text, "scan.png");
 
-        assertThat(result.documentType()).isEqualTo(DocumentType.INSURANCE);
+        assertThat(result.documentType()).isEqualTo(DocumentType.INSURANCE.name());
         // Only the real expiration survives; the issued/printed dates are dropped.
         assertThat(result.dates()).hasSize(1);
         final var only = result.dates().get(0);
@@ -118,7 +118,7 @@ class StubAiExtractionProviderTest {
         final var text = "ACME INSURANCE\nPremium paid\n2027-06-30";
         final var result = provider.classifyAndExtract(text, "policy.png");
 
-        assertThat(result.documentType()).isEqualTo(DocumentType.INSURANCE);
+        assertThat(result.documentType()).isEqualTo(DocumentType.INSURANCE.name());
         assertThat(result.dates()).hasSize(1);
         final var only = result.dates().get(0);
         assertThat(only.dateType()).isEqualTo(DateType.EXPIRATION);
@@ -143,3 +143,4 @@ class StubAiExtractionProviderTest {
         assertThat(warranty.source()).isEqualTo(FieldSource.DERIVED);
     }
 }
+

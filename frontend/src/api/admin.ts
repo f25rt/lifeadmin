@@ -3,6 +3,7 @@ import type {
   AdminDocumentRow,
   AdminOverview,
   AdminUserRow,
+  AnalyticsView,
   DocumentTypeView,
   Page,
   UploadRulesView,
@@ -11,8 +12,20 @@ import type {
 export const adminApi = {
   overview: () => api.get<AdminOverview>('/admin/overview').then((r) => r.data),
 
+  analytics: () => api.get<AnalyticsView>('/admin/analytics').then((r) => r.data),
+
   users: () =>
     api.get<{ users: AdminUserRow[] }>('/admin/users').then((r) => r.data.users),
+
+  updateUserRole: (userId: string, role: string) =>
+    api
+      .patch<AdminUserRow>(`/admin/users/${userId}/role`, { role })
+      .then((r) => r.data),
+
+  updateUserStatus: (userId: string, disabled: boolean) =>
+    api
+      .patch<AdminUserRow>(`/admin/users/${userId}/status`, { disabled })
+      .then((r) => r.data),
 
   documents: (page = 0, size = 25, accountId?: string) =>
     api
@@ -43,4 +56,16 @@ export const adminApi = {
       defaultOffsetsDays?: string;
     },
   ) => api.patch<DocumentTypeView>(`/admin/document-types/${typeCode}`, body).then((r) => r.data),
+
+  createDocumentType: (body: {
+    typeCode: string;
+    label: string;
+    keywords?: string;
+    relevantDateTypes?: string;
+    defaultOffsetsDays?: string;
+    sortOrder?: number;
+  }) => api.post<DocumentTypeView>('/admin/document-types', body).then((r) => r.data),
+
+  deleteDocumentType: (typeCode: string) =>
+    api.delete(`/admin/document-types/${typeCode}`).then(() => undefined),
 };

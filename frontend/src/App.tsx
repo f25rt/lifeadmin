@@ -9,8 +9,10 @@ import { UploadPage } from './pages/UploadPage';
 import { DocumentDetailPage } from './pages/DocumentDetailPage';
 import { DocumentReviewPage } from './pages/DocumentReviewPage';
 import { RemindersPage } from './pages/RemindersPage';
+import { AccountSettingsPage } from './pages/AccountSettingsPage';
 import { AdminRoute } from './auth/AdminRoute';
 import { AdminOverviewPage } from './pages/admin/AdminOverviewPage';
+import { AdminAnalyticsPage } from './pages/admin/AdminAnalyticsPage';
 import { AdminUsersPage } from './pages/admin/AdminUsersPage';
 import { AdminDocumentsPage } from './pages/admin/AdminDocumentsPage';
 import { AdminUploadRulesPage } from './pages/admin/AdminUploadRulesPage';
@@ -70,7 +72,16 @@ export default function App() {
           </ProtectedRoute>
         }
       />
+      <Route
+        path="/account"
+        element={
+          <ProtectedRoute>
+            <AccountSettingsPage />
+          </ProtectedRoute>
+        }
+      />
       <Route path="/admin" element={<AdminRoute><AdminOverviewPage /></AdminRoute>} />
+      <Route path="/admin/analytics" element={<AdminRoute><AdminAnalyticsPage /></AdminRoute>} />
       <Route path="/admin/users" element={<AdminRoute><AdminUsersPage /></AdminRoute>} />
       <Route path="/admin/documents" element={<AdminRoute><AdminDocumentsPage /></AdminRoute>} />
       <Route path="/admin/upload-rules" element={<AdminRoute><AdminUploadRulesPage /></AdminRoute>} />

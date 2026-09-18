@@ -78,7 +78,7 @@ export interface DocumentSummary {
   id: string;
   title: string;
   fileName: string;
-  documentType: DocumentType | null;
+  documentType: string | null;
   status: DocumentStatus;
   fileSize: number;
   createdAt: string;
@@ -121,7 +121,7 @@ export interface DocumentDetail {
   fileName: string;
   mimeType: string;
   fileSize: number;
-  documentType: DocumentType | null;
+  documentType: string | null;
   classificationConfidence: number | null;
   status: DocumentStatus;
   failureReason: string | null;
@@ -134,9 +134,15 @@ export interface DocumentDetail {
 }
 
 export interface VerifyRequest {
-  documentType?: DocumentType;
+  documentType?: string;
   fields?: { fieldName: string; fieldValue: string }[];
   dates?: { dateType: string; dateValue: string }[];
+}
+
+/** A selectable document type from the server (enabled types, incl. admin-created). */
+export interface TypeOption {
+  code: string;
+  label: string;
 }
 
 export const DOCUMENT_TYPES: DocumentType[] = [
@@ -225,7 +231,7 @@ export interface UpcomingDate {
   importantDateId: string;
   documentId: string;
   documentTitle: string;
-  documentType: DocumentType | null;
+  documentType: string | null;
   dateType: string;
   dateValue: string;
   daysUntil: number;
@@ -264,9 +270,13 @@ export interface AdminUserRow {
   accountId: string;
   timezone: string;
   country: string;
+  disabled: boolean;
   documentCount: number;
   createdAt: string;
 }
+
+export const USER_ROLES = ['SUPER_ADMIN', 'OWNER', 'ADMIN', 'MEMBER', 'VIEWER'] as const;
+export type UserRoleName = (typeof USER_ROLES)[number];
 
 export interface AdminDocumentRow {
   id: string;
@@ -295,4 +305,34 @@ export interface DocumentTypeView {
   relevantDateTypes: string;
   defaultOffsetsDays: string;
   sortOrder: number;
+}
+
+// --- Account usage + data portability (Phase 5) ---
+export interface UsageView {
+  plan: string;
+  documentsUsed: number;
+  documentLimit: number;
+}
+
+// --- Admin analytics / success funnel (spec §31) ---
+export interface FunnelStage {
+  stage: string;
+  count: number;
+  pctOfSignups: number;
+}
+
+export interface RetentionBucket {
+  days: number;
+  retained: number;
+  eligible: number;
+  rate: number;
+}
+
+export interface AnalyticsView {
+  funnel: FunnelStage[];
+  processingSuccessRate: number;
+  documentsProcessedOk: number;
+  documentsFailed: number;
+  reminderConversionRate: number;
+  retention: RetentionBucket[];
 }

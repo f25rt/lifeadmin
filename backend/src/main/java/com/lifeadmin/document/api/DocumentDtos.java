@@ -4,7 +4,6 @@ import java.time.Instant;
 import java.util.List;
 
 import com.lifeadmin.document.DocumentStatus;
-import com.lifeadmin.document.DocumentType;
 
 import jakarta.validation.constraints.Size;
 
@@ -18,7 +17,7 @@ public final class DocumentDtos {
     public record UpdateDocumentRequest(
             @Size(max = 255) String title,
             String personId,
-            DocumentType documentType,
+            @Size(max = 32) String documentType,
             Boolean archive) {
     }
 
@@ -27,7 +26,7 @@ public final class DocumentDtos {
             String id,
             String title,
             String fileName,
-            DocumentType documentType,
+            String documentType,
             DocumentStatus status,
             long fileSize,
             Instant createdAt) {
@@ -40,7 +39,7 @@ public final class DocumentDtos {
             String fileName,
             String mimeType,
             long fileSize,
-            DocumentType documentType,
+            String documentType,
             java.math.BigDecimal classificationConfidence,
             DocumentStatus status,
             String failureReason,
@@ -70,7 +69,7 @@ public final class DocumentDtos {
 
     /** Verify/correct extracted data (spec §8). Any provided item becomes source=USER, verified. */
     public record VerifyRequest(
-            DocumentType documentType,
+            @Size(max = 32) String documentType,
             List<VerifyField> fields,
             List<VerifyDate> dates) {
     }

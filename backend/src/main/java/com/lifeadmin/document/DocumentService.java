@@ -142,11 +142,17 @@ public class DocumentService {
     }
 
     @Transactional(readOnly = true)
-    public Page<DocumentSummary> list(final DocumentStatus status, final Pageable pageable) {
+    public Page<DocumentSummary> list(final DocumentStatus status, final String q, final Pageable pageable) {
         final var accountId = currentUser.require().accountId();
-        final var page = (status == null)
-                ? documentRepository.findByAccountId(accountId, pageable)
-                : documentRepository.findByAccountIdAndStatus(accountId, status, pageable);
+        final Page<Document> page;
+        if (q != null && !q.isBlank()) {
+            // Search takes precedence over the status filter; results are already account-scoped.
+            page = documentRepository.search(accountId, q.trim(), pageable);
+        } else if (status == null) {
+            page = documentRepository.findByAccountId(accountId, pageable);
+        } else {
+            page = documentRepository.findByAccountIdAndStatus(accountId, status, pageable);
+        }
         return page.map(DocumentService::toSummary);
     }
 

@@ -58,9 +58,13 @@ public class Document extends Auditable {
     @Column(name = "file_size", nullable = false)
     private long fileSize;
 
-    @Enumerated(EnumType.STRING)
+    /**
+     * The document's type code (matches a {@code document_type_config.type_code}, V7/V10). Stored as
+     * a free string rather than an enum so admins can add custom types at runtime; the built-in
+     * {@link DocumentType} values remain valid codes.
+     */
     @Column(name = "document_type", length = 32)
-    private DocumentType documentType;
+    private String documentType;
 
     @Column(name = "classification_confidence")
     private BigDecimal classificationConfidence;

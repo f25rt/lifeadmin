@@ -6,7 +6,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
-import com.lifeadmin.document.DocumentType;
 import com.lifeadmin.extraction.DateType;
 import com.lifeadmin.extraction.FieldSource;
 
@@ -53,6 +52,7 @@ public class StubAiExtractionProvider implements AiExtractionProvider {
     public ExtractionResult classifyAndExtract(final String text, final String fileName) {
         final var haystack = ((text == null ? "" : text) + " " + (fileName == null ? "" : fileName))
                 .toLowerCase(Locale.ROOT);
+        // Type code (a document_type_config.type_code; built-in or admin-created).
         final var type = typeConfig.classify(haystack);
         final var fields = new ArrayList<ExtractedFieldResult>();
         final var dates = new ArrayList<ImportantDateResult>();
@@ -64,14 +64,16 @@ public class StubAiExtractionProvider implements AiExtractionProvider {
         // representative (full field extraction remains out of scope for the stub).
         final var parsedDates = readRealDates(text, type);
 
+        // Representative synthetic extraction for the built-in types. Admin-created custom types fall
+        // through (no synthetic fields), but still get real OCR dates + configured primary-date logic.
         switch (type) {
-            case PASSPORT -> {
+            case "PASSPORT" -> {
                 fields.add(field("holderName", "Juan Dela Cruz", HIGH));
                 fields.add(field("documentNumber", "P1234567A", MED));
                 dates.add(date(DateType.EXPIRATION, today.plusYears(3), HIGH, FieldSource.OCR));
                 actions.add("Renew passport before expiration");
             }
-            case INSURANCE -> {
+            case "INSURANCE" -> {
                 fields.add(field("organization", "ABC Insurance", HIGH));
                 fields.add(field("documentNumber", "INS-123456", MED));
                 dates.add(date(DateType.EXPIRATION, today.plusMonths(3), HIGH, FieldSource.OCR));
@@ -79,13 +81,13 @@ public class StubAiExtractionProvider implements AiExtractionProvider {
                 actions.add("Prepare renewal documents");
                 actions.add("Compare renewal quotes");
             }
-            case VEHICLE_REGISTRATION -> {
+            case "VEHICLE_REGISTRATION" -> {
                 fields.add(field("plateNumber", "ABC-1234", HIGH));
                 dates.add(date(DateType.EXPIRATION, today.plusDays(43), HIGH, FieldSource.OCR));
                 actions.add("Renew registration");
                 actions.add("Check insurance is current");
             }
-            case WARRANTY, RECEIPT -> {
+            case "WARRANTY", "RECEIPT" -> {
                 fields.add(field("organization", "Samsung", HIGH));
                 fields.add(field("warrantyTermYears", "2", MED));
                 final var purchase = today.minusDays(10);
@@ -94,23 +96,23 @@ public class StubAiExtractionProvider implements AiExtractionProvider {
                 dates.add(date(DateType.WARRANTY_EXPIRATION, purchase.plusYears(2), MED, FieldSource.DERIVED));
                 actions.add("Keep receipt and warranty until expiration");
             }
-            case DRIVERS_LICENSE -> {
+            case "DRIVERS_LICENSE" -> {
                 fields.add(field("holderName", "Juan Dela Cruz", HIGH));
                 dates.add(date(DateType.EXPIRATION, today.plusYears(2), HIGH, FieldSource.OCR));
                 actions.add("Renew driver's license before expiration");
             }
-            case CONTRACT -> {
+            case "CONTRACT" -> {
                 dates.add(date(DateType.CONTRACT_START, today.minusMonths(1), MED, FieldSource.OCR));
                 dates.add(date(DateType.CONTRACT_END, today.plusMonths(11), MED, FieldSource.OCR));
                 actions.add("Review renewal terms before contract end");
             }
-            case BILL, SUBSCRIPTION -> {
+            case "BILL", "SUBSCRIPTION" -> {
                 fields.add(field("organization", "Utility Co", MED));
                 dates.add(date(DateType.PAYMENT_DEADLINE, today.plusDays(12), HIGH, FieldSource.OCR));
                 actions.add("Pay before the deadline");
             }
             default -> {
-                // OTHER / unclassifiable: nothing confidently extracted.
+                // OTHER / custom / unclassifiable: nothing confidently extracted synthetically.
             }
         }
 
@@ -120,7 +122,7 @@ public class StubAiExtractionProvider implements AiExtractionProvider {
             dates.addAll(parsedDates);
             // For warranties, if no explicit expiration was read but a purchase date was, derive the
             // expiration from the *real* purchase date (purchase + 2 years) and mark it DERIVED.
-            if (type == DocumentType.WARRANTY
+            if ("WARRANTY".equals(type)
                     && parsedDates.stream().noneMatch(d -> d.dateType() == DateType.WARRANTY_EXPIRATION)) {
                 parsedDates.stream()
                         .filter(d -> d.dateType() == DateType.PURCHASE)
@@ -131,7 +133,7 @@ public class StubAiExtractionProvider implements AiExtractionProvider {
             }
         }
 
-        final var confidence = type == DocumentType.OTHER ? new BigDecimal("0.40") : HIGH;
+        final var confidence = "OTHER".equals(type) ? new BigDecimal("0.40") : HIGH;
         return new ExtractionResult(type, confidence, fields, dates, actions);
     }
 
@@ -145,7 +147,7 @@ public class StubAiExtractionProvider implements AiExtractionProvider {
      * it surfaces for the user to confirm rather than being silently lost. All read dates are marked
      * {@link FieldSource#OCR}.
      */
-    private List<ImportantDateResult> readRealDates(final String text, final DocumentType type) {
+    private List<ImportantDateResult> readRealDates(final String text, final String type) {
         final var found = DateTextParser.parse(text, dayFirst);
         if (found.isEmpty()) {
             return List.of();
@@ -191,17 +193,17 @@ public class StubAiExtractionProvider implements AiExtractionProvider {
      * The date a document of this type most likely carries, used when the text gives no keyword.
      * Prefers the admin-configured relevant date types (first one); falls back to a built-in default.
      */
-    private DateType primaryDateType(final DocumentType type) {
+    private DateType primaryDateType(final String type) {
         final var configured = typeConfig.relevantDateTypes(type);
         if (!configured.isEmpty()) {
             return configured.iterator().next();
         }
         return switch (type) {
-            case PASSPORT, DRIVERS_LICENSE, INSURANCE, VEHICLE_REGISTRATION, LICENSE, CERTIFICATE,
-                 GOVERNMENT_DOCUMENT, PROPERTY_DOCUMENT -> DateType.EXPIRATION;
-            case WARRANTY -> DateType.WARRANTY_EXPIRATION;
-            case CONTRACT -> DateType.CONTRACT_END;
-            case BILL, SUBSCRIPTION -> DateType.PAYMENT_DEADLINE;
+            case "PASSPORT", "DRIVERS_LICENSE", "INSURANCE", "VEHICLE_REGISTRATION", "LICENSE",
+                 "CERTIFICATE", "GOVERNMENT_DOCUMENT", "PROPERTY_DOCUMENT" -> DateType.EXPIRATION;
+            case "WARRANTY" -> DateType.WARRANTY_EXPIRATION;
+            case "CONTRACT" -> DateType.CONTRACT_END;
+            case "BILL", "SUBSCRIPTION" -> DateType.PAYMENT_DEADLINE;
             default -> DateType.OTHER;
         };
     }

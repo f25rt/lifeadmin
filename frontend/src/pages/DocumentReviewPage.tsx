@@ -4,7 +4,6 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AppHeader } from '../components/AppHeader';
 import { documentsApi } from '../api/documents';
 import { errorMessage } from '../api/client';
-import { DOCUMENT_TYPES, type DocumentType } from '../api/types';
 
 /**
  * "We found these details — please verify" (spec §8). Editable fields + dates (with explicit vs.
@@ -21,8 +20,14 @@ export function DocumentReviewPage() {
     enabled: !!id,
   });
 
-  const [docType, setDocType] = useState<DocumentType | ''>('');
+  const [docType, setDocType] = useState<string>('');
   const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
+
+  // Selectable types come from the server (built-in + admin-created, enabled only).
+  const { data: typeOptions } = useQuery({
+    queryKey: ['document-types', 'enabled'],
+    queryFn: () => documentsApi.types(),
+  });
 
   // Seed local editable state once the document loads.
   useEffect(() => {
@@ -66,13 +71,17 @@ export function DocumentReviewPage() {
                 <span className="mb-1 block text-sm font-medium text-slate-700">Document type</span>
                 <select
                   value={docType}
-                  onChange={(e) => setDocType(e.target.value as DocumentType)}
+                  onChange={(e) => setDocType(e.target.value)}
                   className="w-full rounded-lg border border-slate-300 px-3 py-2"
                 >
                   <option value="">Unclassified</option>
-                  {DOCUMENT_TYPES.map((t) => (
-                    <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>
+                  {(typeOptions ?? []).map((t) => (
+                    <option key={t.code} value={t.code}>{t.label}</option>
                   ))}
+                  {/* Preserve a current custom/disabled type that isn't in the enabled list. */}
+                  {docType && !(typeOptions ?? []).some((t) => t.code === docType) && (
+                    <option value={docType}>{docType.replace(/_/g, ' ')}</option>
+                  )}
                 </select>
                 {doc.classificationConfidence != null && (
                   <span className="mt-1 block text-xs text-slate-400">

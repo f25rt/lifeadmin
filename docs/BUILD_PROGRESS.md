@@ -4,10 +4,14 @@ Tracks implementation against the phased roadmap (`ROADMAP.md`). Each phase ends
 runnable, testable application.
 
 > ## ▶ Resume here (session checkpoint)
-> **Done so far:** Phases 1–4 + post-phase work: Tesseract OCR, real OCR date parsing, stricter date
-> extraction (decision 1b), reminder before/after direction, in-app confirm dialogs, and the full
+> **Done so far:** Phases 1–5. Post-phase-4 work: Tesseract OCR, real OCR date parsing, stricter date
+> extraction (decision 1b), reminder before/after direction, in-app confirm dialogs, the full
 > **platform admin** (SUPER_ADMIN: overview, users, documents, upload rules, document types & AI
-> templates). Backend **49 tests green**; frontend `npm run build` green.
+> templates), and **admin user management** (promote/demote role + enable/disable login). **Phase 5**
+> adds full-text **document search**, self-service **data export/delete** (G5), **plan-usage** in the
+> UI, **security hardening** (response headers + request rate limiting), a platform
+> **analytics success funnel** (spec §31), and **admin-managed dynamic document types** (create/
+> delete custom types at runtime). Backend **65 tests green**; frontend `npm run build` green.
 >
 > **Run it again (from `backend/`):** set `JAVA_HOME` to JDK 21, then `mvn spring-boot:run` with:
 > `SPRING_DATASOURCE_URL=jdbc:postgresql://localhost:5433/lifeadmin`,
@@ -19,10 +23,12 @@ runnable, testable application.
 > `java` is JDK 8). Test user `juan@example.com` / `ChangeMe123!`; admin `admin@lifeadmin.local` /
 > `ChangeMeAdmin123!`.
 >
-> **Next up (agreed):** admin ability to **promote/demote a user's role** (and optionally
-> disable/enable an account) from the Users page. Then Phase 5 (search, mobile polish, hardening,
-> usage limits). Optional backlog: dynamic document-type *codes*; real AI field extraction; provenance
-> "read from …" labels on the review screen (decision 2).
+> **Next up:** the last deferred Phase 5 item — **i18n scaffolding + a full WCAG audit** (the audit
+> needs manual assistive-tech testing). Optional backlog: real AI field extraction; provenance
+> "read from …" labels on the review screen (decision 2); a distributed (shared-store) rate limiter
+> for multi-instance deployments; persisted analytics events + date-range filtering (the current
+> funnel is computed on read from existing data). *(Done: admin role/enable-disable, the core Phase 5
+> scope, the analytics success funnel, and admin-managed dynamic document types — see below.)*
 
 | Phase | Scope | Status |
 |-------|-------|--------|
@@ -31,7 +37,7 @@ runnable, testable application.
 | 2 | Documents — upload, object storage, list/detail/delete | Done |
 | 3 | AI processing — OCR, classification, extraction, review | Done |
 | 4 | Reminders — important dates, scheduler, notifications, dashboard | Done |
-| 5 | Polish — search, mobile UX, hardening, usage limits, analytics | Pending |
+| 5 | Polish — search, data export/delete, usage limits, hardening (analytics + full i18n deferred) | Done |
 
 ## Phase 1 — what was built & verified
 
@@ -340,3 +346,169 @@ admin-edited template at runtime) → restored.
 - Integration tests use the Testcontainers **singleton container** pattern.
 - `ddl-auto=validate` — Flyway owns the schema.
 - All secrets via env vars; JWT secret must be overridden per environment.
+
+## Admin user management — promote/demote role + enable/disable login
+
+A SUPER_ADMIN can now change a user's **role** and **enable/disable** their login from the admin
+Users page (previously read-only). Both operations are audited and guarded.
+
+**Backend:**
+- Flyway `V8`: adds `disabled BOOLEAN NOT NULL DEFAULT FALSE` to `app_user` (a soft-lock; existing
+  rows default to enabled). `AppUser` gets the matching `disabled` field; `AdminUserRow` now carries
+  it so the UI can render status.
+- **Endpoints** (`AdminController`, SUPER_ADMIN-only like the rest of `/admin/**`):
+  - `PATCH /admin/users/{userId}/role` — body `{"role":"SUPER_ADMIN|OWNER|ADMIN|MEMBER|VIEWER"}`.
+  - `PATCH /admin/users/{userId}/status` — body `{"disabled":true|false}`.
+- **Guardrails** (`AdminService`): an admin can't change their **own** role (avoids self-lockout from
+  SUPER_ADMIN) or disable their **own** login → `409 CONFLICT`; an unknown role → `400`. The
+  last-owner rule (`wouldOrphanAccount`) only blocks demoting the sole OWNER of a **multi-user**
+  account — a single-user account (the MVP norm, one OWNER per account) can freely have its owner's
+  role changed, since there's no one to orphan. No-op changes (same role / same status) short-circuit.
+- **Login enforcement** (`AuthService`): a disabled user is rejected at **login** and **token
+  refresh** with `401` ("This account has been disabled"), so disabling takes effect even for a user
+  holding a valid refresh token (a live access token still works until it expires — minutes).
+- **Audit** (`AuditService`): `ADMIN_USER_ROLE_CHANGED` (old → new role), `ADMIN_USER_DISABLED`,
+  `ADMIN_USER_ENABLED`, stamped with the acting admin + correlation id.
+- **Tests: 54 green** (adds 6 to `AdminApiIntegrationTest`: role change, unknown-role 400,
+  sole-owner-of-single-user-account can be demoted, disable→login 401→re-enable→login 200, and
+  self-role/self-disable 409).
+
+**Frontend:**
+- `admin` API: `updateUserRole(id, role)` / `updateUserStatus(id, disabled)`; `AdminUserRow` type
+  gains `disabled`; `USER_ROLES` constant added.
+- **Users page**: per-row **role `<select>`** and an **Enable/Disable** button, plus a **Status**
+  column (Active/Disabled badge; disabled rows dimmed). Each action routes through the shared
+  `ConfirmDialog` (destructive styling for Disable) and shows backend error messages inline. The
+  admin's **own row** is guarded in the UI too (role select disabled, action shows "You"). `npm run
+  build` green.
+
+**Verified:** `mvn test` on JDK 21 → 54 green; `npm run build` green; Docker/Testcontainers used for
+the integration suite.
+
+> Note on scope: disabling is modeled per `app_user` (authentication is per-user) rather than a
+> separate account-level flag — consistent with the one-account-one-user MVP. If multi-user accounts
+> land later, an account-wide disable can layer on top without changing this contract.
+
+## Phase 5 — Polish & hardening
+
+Search, self-service data portability, plan-usage visibility, and security hardening. Analytics and a
+full i18n/WCAG pass were explicitly deferred (see resume block).
+
+**Backend:**
+- **Full-text document search** (G9/D3). Flyway `V9` enables `pg_trgm` and adds GIN indexes: a
+  `to_tsvector('simple', …)` expression index over the document's title/file name/type, a trigram
+  index on the title, and FTS + trigram indexes on `extracted_field.field_value`. `DocumentRepository.search`
+  is a native query that ORs a `plainto_tsquery` match (document metadata **or** any extracted field
+  value) with an `ILIKE` prefix fallback so short/partial terms still hit; account-scoped, newest-first,
+  paged. `GET /documents?q=…` (search takes precedence over the status filter). The `simple` text
+  config avoids language-stemming surprises on mixed-locale (PH) content.
+- **Self-service data export/delete** (G5), new `account.data` module acting only on the caller's own
+  account. `GET /account/export` returns a full JSON snapshot (account, users, subscription, documents
+  with fields/dates, reminders) as a download. `DELETE /account` permanently purges everything in
+  FK-safe order — storage blobs first, then documents (DB `ON DELETE CASCADE` clears
+  fields/dates/actions/reminders), then user-scoped notifications + refresh tokens, subscription,
+  users, and the account row — guarded by an **email-confirmation** match. The `audit_log` row
+  (`ACCOUNT_DELETE`) is written before the account is removed and intentionally survives (audit has no
+  account FK).
+- **Plan usage** surfaced via `GET /account/usage` (plan, documents used vs. limit), reading the same
+  `QuotaService`/`Subscription` source that enforces the upload quota (archived docs excluded).
+- **Security hardening.** `SecurityConfig` now emits response headers: a locked-down CSP
+  (`default-src 'none'; frame-ancestors 'none'` — safe for a JSON API), HSTS (1y, includeSubDomains),
+  `Referrer-Policy: no-referrer`, `X-Content-Type-Options: nosniff`, and frame-deny. A dependency-free
+  fixed-window **rate limiter** (`RateLimitFilter`, per client IP) protects the abuse-prone endpoints:
+  auth (login/register/refresh) and upload/process. Over-limit → `429` with the standard error
+  envelope + `Retry-After`. Configurable via `lifeadmin.rate-limit.*` (`enabled`, `windowSeconds`,
+  `authPerWindow`, `uploadPerWindow`); disabled in the test profile.
+- **Tests: 61 green** (+7). `AccountDataIntegrationTest`: search finds by title and excludes
+  non-matches, usage reflects uploads, export returns the account JSON, and delete requires the
+  matching email then purges everything (post-delete login → 401). `RateLimitFilterTest`: allows up to
+  the limit then 429s, never limits unmatched paths, and is a no-op when disabled.
+
+**Frontend:**
+- **Search box** on the Documents page (debounced 300 ms) wired to `?q=`, with a distinct "no matches"
+  empty state vs. the "no documents yet" state.
+- **Account & data page** (`/account`): a plan-usage bar (used/limit with amber/red thresholds), a
+  **Download export** button (streams the JSON blob to a file), and a **danger-zone** account delete
+  requiring the user to type their email, then a destructive `ConfirmDialog`; on success it logs out
+  and returns to the landing page. Reachable from the header plan badge (now a link).
+- **Dashboard** shows a compact usage line linking to `/account`. `npm run build` green.
+
+> Deployment note (README): the rate limiter is per-instance (in-memory). Behind multiple instances,
+> front it with a shared limiter (API gateway / Redis) or accept per-instance windows. HSTS assumes
+> TLS is terminated upstream.
+
+## Analytics — platform success funnel (spec §31)
+
+A SUPER_ADMIN-only product-metrics view, added as the last major Phase 5 item. Deliberately
+**computed on read from data we already persist** (accounts, documents + status, reminders, the
+audit log) rather than a separate event-tracking pipeline — no schema changes, no double-writes.
+
+**Backend:**
+- **Repository aggregates** (no new tables): `DocumentRepository` — distinct accounts with any
+  document / with a processed document (REVIEW_REQUIRED/ACTIVE/ARCHIVED) / with a given status, plus
+  the existing per-status counts; `ReminderRepository` — distinct accounts with a reminder and
+  per-status counts; `AuditLogRepository` — a **retention** proxy via two native queries
+  (`countRetainedAccounts(days)` = distinct accounts with audit activity ≥ N days after their account
+  was created, and `countAccountsOlderThanDays(days)` = accounts old enough to qualify). Retention is
+  a proxy because there's no session/login-timestamp table; the audit log's `occurred_at` is the best
+  existing signal.
+- **`AnalyticsService`** builds the account-level funnel — **Signups → Uploaded a document →
+  Document processed → Verified (activated) → Created a reminder** — each stage as a count plus its %
+  of signups; a **processing success rate** (ok = ACTIVE+REVIEW_REQUIRED+ARCHIVED vs. ok+FAILED, at
+  the document level); a **reminder conversion** proxy (SENT vs. SENT+SCHEDULED+FAILED); and
+  **7/30/90-day retention** buckets.
+- **`GET /admin/analytics`** (SUPER_ADMIN; same authz as the rest of `/admin/**`) returns
+  `AnalyticsView` (funnel + rates + retention).
+- **Tests: 63 green** (+2 in `AdminApiIntegrationTest`): a regular user is forbidden (403); the admin
+  sees the five funnel stages (Signups first, count ≥ 1), three retention buckets (7/30/90), and the
+  two rates present.
+
+**Frontend:**
+- **Admin → Analytics** page (`/admin/analytics`, new sub-nav tab): the funnel as labelled progress
+  bars (count + % of signups), two rate cards (processing success, reminder conversion) with
+  green/amber/red thresholds, and three retention cards (retained/eligible per horizon).
+  `npm run build` green.
+
+> This is an on-read snapshot (all-time, no date range). If richer analytics are needed later
+> (time-series, cohort charts, funnel over a window), persist analytics events and query by range —
+> noted in the backlog. The current approach is accurate for the MVP's "are people activating and
+> coming back?" question without new infrastructure.
+
+## Admin-managed dynamic document types
+
+Admins can now **create and delete their own document types** at runtime from Admin → Document types
+& AI (previously only the fixed enum types could be edited). This retired the hard `DocumentType`
+enum as the storage type in favour of a free type-code string keyed to `document_type_config`.
+
+**Backend:**
+- **Migration `V10`** drops the `ck_document_type` CHECK on `document.document_type` so any config
+  `type_code` is a valid value. No data migration — existing values stay valid codes.
+- **Type model:** `Document.documentType` is now a `String` code (not the enum); the enum
+  `DocumentType` is kept only as the set of **built-in** codes (protected from deletion) and for the
+  stub extractor's per-type special-casing (WARRANTY derivation, OTHER fallback), which now switch on
+  the code string. `AiExtractionProvider.ExtractionResult.documentType`, `classify()`, the
+  `AccountDateView` projection, and the document DTOs are all `String`-typed. JSON is unchanged on the
+  wire (enums already serialized as their names).
+- **`DocumentTypeConfigService`** gains `create(...)` (normalizes the code to `UPPER_SNAKE`, validates
+  `[A-Z][A-Z0-9_]{0,31}`, unique, requires a label) and `delete(...)` (blocks built-ins and `OTHER`;
+  reassigns any documents on the type to `OTHER` via `DocumentRepository.reassignType` so nothing is
+  left pointing at a missing code), plus `listEnabled()`.
+- **Endpoints:** `POST /admin/document-types` (201) and `DELETE /admin/document-types/{code}` (204),
+  SUPER_ADMIN-only; and a public **`GET /documents/types`** (any authenticated user) returning enabled
+  `{code,label}` pairs so the user-facing review picker can offer custom types.
+- **Tests: 65 green** (+2): create a custom type → appears in the list; duplicate → 409; delete it →
+  204; invalid code → 400; deleting a built-in → 409. The existing stub-extractor tests were updated
+  to assert against string codes.
+
+**Frontend:**
+- **Admin → Document types & AI**: an **Add document type** form (code + label + keywords + relevant
+  date types + offsets) and a per-row **Delete** action on custom types (built-ins have no delete),
+  behind the shared `ConfirmDialog`.
+- The user-facing **Review** page now loads its type options from `GET /documents/types` (so custom
+  types are selectable), preserving a document's current custom/disabled type in the dropdown if it
+  isn't in the enabled list. Document `documentType` fields are now `string`. `npm run build` green.
+
+> Note: custom types are classified by their admin-set keywords and use the configured
+> relevant-date-types/offsets, but they don't get the built-in stub's synthetic field extraction or
+> the WARRANTY-style derived-date logic (those remain specific to the built-in codes) — correct for
+> a keyword-driven custom type. A real AI provider would extract fields for any type.

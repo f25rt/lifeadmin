@@ -4,6 +4,7 @@ import { useAuth } from '../../auth/AuthContext';
 
 const adminNav = [
   { to: '/admin', label: 'Overview', end: true },
+  { to: '/admin/analytics', label: 'Analytics' },
   { to: '/admin/users', label: 'Users' },
   { to: '/admin/documents', label: 'Documents' },
   { to: '/admin/upload-rules', label: 'Upload rules' },

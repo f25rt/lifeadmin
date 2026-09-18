@@ -46,6 +46,9 @@ public abstract class AbstractIntegrationTest {
         registry.add("lifeadmin.messaging.enabled", () -> "false");
         // No SMTP server in tests: use the logging email provider.
         registry.add("lifeadmin.email.provider", () -> "log");
+        // The suite fires many auth logins per class; keep the fixed-window rate limiter off so it
+        // never trips. A dedicated test exercises the limiter with it enabled.
+        registry.add("lifeadmin.rate-limit.enabled", () -> "false");
         // Never let the @Scheduled reminder poll fire on its own during tests — it would race with
         // the manual scheduler.poll() calls and make notification counts nondeterministic. Tests
         // drive the scheduler explicitly. (~1 year interval effectively disables the auto-run.)

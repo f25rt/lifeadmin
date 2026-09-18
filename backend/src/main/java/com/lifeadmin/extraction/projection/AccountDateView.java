@@ -3,7 +3,6 @@ package com.lifeadmin.extraction.projection;
 import java.time.LocalDate;
 import java.util.UUID;
 
-import com.lifeadmin.document.DocumentType;
 import com.lifeadmin.extraction.DateType;
 import com.lifeadmin.extraction.FieldSource;
 
@@ -15,7 +14,7 @@ public interface AccountDateView {
     UUID getId();
     UUID getDocumentId();
     String getDocumentTitle();
-    DocumentType getDocumentType();
+    String getDocumentType();
     DateType getDateType();
     LocalDate getDateValue();
     FieldSource getSource();

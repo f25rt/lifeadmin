@@ -1,5 +1,6 @@
 package com.lifeadmin.common.web;
 
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.config.annotation.PathMatchConfigurer;
@@ -14,6 +15,7 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
  * container and the test dispatcher.
  */
 @Configuration
+@EnableConfigurationProperties(RateLimitProperties.class)
 public class WebConfig implements WebMvcConfigurer {
 
     public static final String API_PREFIX = "/api/v1";

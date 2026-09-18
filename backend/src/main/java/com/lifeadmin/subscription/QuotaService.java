@@ -34,4 +34,17 @@ public class QuotaService {
                             + subscription.getDocumentLimit() + " documents.");
         }
     }
+
+    /** Current document usage vs. the plan limit, for surfacing in the UI (Phase 5). */
+    @Transactional(readOnly = true)
+    public UsageView usage(final UUID accountId) {
+        final var subscription = subscriptionRepository.findByAccountId(accountId)
+                .orElseThrow(() -> new IllegalStateException("No subscription for account " + accountId));
+        final var used = documentRepository.countByAccountIdAndStatusNot(accountId, DocumentStatus.ARCHIVED);
+        return new UsageView(subscription.getPlan().name(), used, subscription.getDocumentLimit());
+    }
+
+    /** Plan name plus documents used and allowed (archived documents are excluded from usage). */
+    public record UsageView(String plan, long documentsUsed, int documentLimit) {
+    }
 }

@@ -83,6 +83,9 @@ public class AuthService {
         if (!passwordEncoder.matches(password, user.getPasswordHash())) {
             throw new UnauthorizedException("Invalid email or password");
         }
+        if (user.isDisabled()) {
+            throw new UnauthorizedException("This account has been disabled");
+        }
         return issueTokens(user);
     }
 
@@ -101,6 +104,9 @@ public class AuthService {
 
         final var user = userRepository.findById(stored.getUserId())
                 .orElseThrow(() -> new UnauthorizedException("Invalid refresh token"));
+        if (user.isDisabled()) {
+            throw new UnauthorizedException("This account has been disabled");
+        }
         return issueTokens(user);
     }
 

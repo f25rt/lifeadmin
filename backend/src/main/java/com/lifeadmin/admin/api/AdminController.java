@@ -6,13 +6,19 @@ import java.util.ArrayList;
 import java.util.List;
 
 import com.lifeadmin.admin.AdminService;
+import com.lifeadmin.admin.AnalyticsService;
+import com.lifeadmin.admin.api.AdminDtos.AnalyticsView;
 import com.lifeadmin.admin.api.AdminDtos.AdminDocumentRow;
 import com.lifeadmin.admin.api.AdminDtos.AdminUserList;
 import com.lifeadmin.admin.api.AdminDtos.OverviewStats;
 import com.lifeadmin.admin.api.AdminDtos.DocumentTypeList;
 import com.lifeadmin.admin.api.AdminDtos.DocumentTypeView;
+import com.lifeadmin.admin.api.AdminDtos.AdminUserRow;
+import com.lifeadmin.admin.api.AdminDtos.CreateDocumentTypeRequest;
 import com.lifeadmin.admin.api.AdminDtos.UpdateDocumentTypeRequest;
 import com.lifeadmin.admin.api.AdminDtos.UpdateUploadRulesRequest;
+import com.lifeadmin.admin.api.AdminDtos.UpdateUserRoleRequest;
+import com.lifeadmin.admin.api.AdminDtos.UpdateUserStatusRequest;
 import com.lifeadmin.admin.api.AdminDtos.UploadRulesView;
 import com.lifeadmin.admin.doctype.DocumentTypeConfig;
 import com.lifeadmin.admin.doctype.DocumentTypeConfigService;
@@ -25,6 +31,7 @@ import org.springframework.data.web.PageableDefault;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -41,12 +48,19 @@ import org.springframework.web.bind.annotation.RestController;
 public class AdminController {
 
     private final AdminService adminService;
+    private final AnalyticsService analyticsService;
     private final UploadRulesService uploadRules;
     private final DocumentTypeConfigService documentTypes;
 
     @GetMapping("/overview")
     public OverviewStats overview() {
         return adminService.overview();
+    }
+
+    /** Platform success-funnel analytics (spec §31). */
+    @GetMapping("/analytics")
+    public AnalyticsView analytics() {
+        return analyticsService.analytics();
     }
 
     // --- Upload rules ---
@@ -95,9 +109,43 @@ public class AdminController {
         return toTypeView(updated);
     }
 
+    /** Create a new admin-defined document type. */
+    @PostMapping("/document-types")
+    public org.springframework.http.ResponseEntity<DocumentTypeView> createDocumentType(
+            @RequestBody final CreateDocumentTypeRequest request) {
+        final var created = documentTypes.create(
+                request.typeCode(), request.label(), request.keywords(),
+                request.relevantDateTypes(), request.defaultOffsetsDays(), request.sortOrder());
+        return org.springframework.http.ResponseEntity
+                .status(org.springframework.http.HttpStatus.CREATED)
+                .body(toTypeView(created));
+    }
+
+    /** Delete an admin-created document type (built-ins are protected; in-use docs reassigned to OTHER). */
+    @org.springframework.web.bind.annotation.DeleteMapping("/document-types/{typeCode}")
+    public org.springframework.http.ResponseEntity<Void> deleteDocumentType(
+            @PathVariable final String typeCode) {
+        documentTypes.delete(typeCode);
+        return org.springframework.http.ResponseEntity.noContent().build();
+    }
+
     @GetMapping("/users")
     public AdminUserList users() {
         return new AdminUserList(adminService.listUsers());
+    }
+
+    /** Promote/demote a user's role. Guardrails enforced in the service (self, last-owner). */
+    @PatchMapping("/users/{userId}/role")
+    public AdminUserRow updateUserRole(
+            @PathVariable final UUID userId, @RequestBody final UpdateUserRoleRequest request) {
+        return adminService.updateRole(userId, request.role());
+    }
+
+    /** Enable/disable (soft-lock login for) a user. Cannot disable yourself (service guardrail). */
+    @PatchMapping("/users/{userId}/status")
+    public AdminUserRow updateUserStatus(
+            @PathVariable final UUID userId, @RequestBody final UpdateUserStatusRequest request) {
+        return adminService.updateStatus(userId, request.disabled());
     }
 
     @GetMapping("/documents")

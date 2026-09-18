@@ -56,4 +56,8 @@ public class AppUser extends Auditable {
 
     @Column(name = "country", nullable = false, length = 8)
     private String country = "PH";
+
+    /** Soft-lock: a disabled user cannot log in or refresh tokens. Set by a SUPER_ADMIN (V8). */
+    @Column(name = "disabled", nullable = false)
+    private boolean disabled = false;
 }

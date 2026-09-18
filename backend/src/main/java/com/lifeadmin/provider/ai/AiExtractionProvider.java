@@ -4,7 +4,6 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 
-import com.lifeadmin.document.DocumentType;
 import com.lifeadmin.extraction.DateType;
 import com.lifeadmin.extraction.FieldSource;
 
@@ -19,7 +18,7 @@ public interface AiExtractionProvider {
 
     /** The full structured result of classification + extraction. */
     record ExtractionResult(
-            DocumentType documentType,
+            String documentType,
             BigDecimal classificationConfidence,
             List<ExtractedFieldResult> fields,
             List<ImportantDateResult> dates,

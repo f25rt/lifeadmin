@@ -50,9 +50,13 @@ export function AppHeader() {
             </Link>
           )}
           <NotificationBell />
-          <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">
+          <Link
+            to="/account"
+            title="Account & data"
+            className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-200"
+          >
             {user?.plan}
-          </span>
+          </Link>
           <button
             onClick={handleLogout}
             className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-100"

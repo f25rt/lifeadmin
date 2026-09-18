@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { AppHeader } from '../components/AppHeader';
 import { useAuth } from '../auth/AuthContext';
 import { dashboardApi } from '../api/dashboard';
+import { accountApi } from '../api/account';
 import type { AttentionItem, UpcomingDate } from '../api/types';
 
 export function DashboardPage() {
@@ -10,6 +11,10 @@ export function DashboardPage() {
   const { data, isLoading } = useQuery({
     queryKey: ['dashboard'],
     queryFn: () => dashboardApi.get(),
+  });
+  const { data: usage } = useQuery({
+    queryKey: ['account', 'usage'],
+    queryFn: () => accountApi.usage(),
   });
 
   const counts = data?.counts;
@@ -37,6 +42,18 @@ export function DashboardPage() {
           <MetricCard label="Needs review" value={counts?.needsReview ?? 0} accent="blue" />
           <MetricCard label="Active" value={counts?.activeDocuments ?? 0} accent="green" />
         </div>
+
+        {usage && (
+          <Link
+            to="/account"
+            className="mt-4 flex items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm hover:border-brand"
+          >
+            <span className="text-slate-600">
+              {usage.plan} plan · {usage.documentsUsed} of {usage.documentLimit} documents used
+            </span>
+            <span className="font-medium text-brand">Manage →</span>
+          </Link>
+        )}
 
         {(data?.needsAttention.length ?? 0) > 0 && (
           <section className="mt-8">

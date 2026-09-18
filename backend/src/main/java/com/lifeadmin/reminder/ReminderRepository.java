@@ -13,6 +13,19 @@ public interface ReminderRepository extends JpaRepository<Reminder, UUID> {
 
     List<Reminder> findByAccountIdOrderByScheduledForUtcAsc(UUID accountId);
 
+    /** Full account deletion: purge all reminders for an account. */
+    void deleteByAccountId(UUID accountId);
+
+    // --- Analytics (cross-account funnel) ---
+
+    /** Distinct accounts that have created at least one reminder. */
+    @org.springframework.data.jpa.repository.Query(
+            "select count(distinct r.accountId) from Reminder r")
+    long countDistinctAccountsWithReminder();
+
+    /** Reminders in the given status (e.g. SENT), across all accounts. */
+    long countByStatus(ReminderStatus status);
+
     /** Due reminders the scheduler should fire: scheduled, unsent, and past their instant. */
     List<Reminder> findByStatusAndSentAtIsNullAndScheduledForUtcLessThanEqual(
             ReminderStatus status, Instant now);

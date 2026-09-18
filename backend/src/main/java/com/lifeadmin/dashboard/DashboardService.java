@@ -92,7 +92,7 @@ public class DashboardService {
                 r.getId().toString(),
                 r.getDocumentId().toString(),
                 r.getDocumentTitle(),
-                r.getDocumentType() == null ? null : r.getDocumentType().name(),
+                r.getDocumentType(),
                 r.getDateType().name(),
                 r.getDateValue(),
                 daysUntil,

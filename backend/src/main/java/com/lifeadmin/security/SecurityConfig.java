@@ -1,5 +1,7 @@
 package com.lifeadmin.security;
 
+import static org.springframework.security.config.Customizer.withDefaults;
+
 import java.util.Optional;
 
 import com.lifeadmin.security.auth.CurrentUser;
@@ -66,6 +68,19 @@ public class SecurityConfig {
                         .anyRequest().authenticated())
                 .exceptionHandling(ex -> ex
                         .authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED)))
+                // Security response headers (Phase 5 hardening). The API serves only JSON, so a
+                // locked-down CSP is safe here; the SPA is served/hardened separately by nginx.
+                .headers(headers -> headers
+                        .contentTypeOptions(withDefaults())
+                        .frameOptions(frame -> frame.deny())
+                        .referrerPolicy(ref -> ref.policy(
+                                org.springframework.security.web.header.writers.ReferrerPolicyHeaderWriter
+                                        .ReferrerPolicy.NO_REFERRER))
+                        .httpStrictTransportSecurity(hsts -> hsts
+                                .includeSubDomains(true)
+                                .maxAgeInSeconds(31536000))
+                        .contentSecurityPolicy(csp -> csp.policyDirectives(
+                                "default-src 'none'; frame-ancestors 'none'")))
                 .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);
         return http.build();
     }

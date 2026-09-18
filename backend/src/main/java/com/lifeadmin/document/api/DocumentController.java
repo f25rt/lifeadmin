@@ -3,6 +3,9 @@ package com.lifeadmin.document.api;
 import java.io.IOException;
 import java.util.UUID;
 
+import java.util.List;
+
+import com.lifeadmin.admin.doctype.DocumentTypeConfigService;
 import com.lifeadmin.common.error.ValidationException;
 import com.lifeadmin.document.DocumentService;
 import com.lifeadmin.document.DocumentStatus;
@@ -44,6 +47,19 @@ import org.springframework.web.multipart.MultipartFile;
 public class DocumentController {
 
     private final DocumentService documentService;
+    private final DocumentTypeConfigService documentTypes;
+
+    /** A selectable document type for the user-facing picker (enabled types only). */
+    public record TypeOption(String code, String label) {
+    }
+
+    /** Enabled document types (code + label) for the type picker. Any authenticated user. */
+    @GetMapping("/types")
+    public List<TypeOption> types() {
+        return documentTypes.listEnabled().stream()
+                .map(c -> new TypeOption(c.getTypeCode(), c.getLabel()))
+                .toList();
+    }
 
     @PostMapping
     public ResponseEntity<UploadResponse> upload(
@@ -65,8 +81,9 @@ public class DocumentController {
     @GetMapping
     public Page<DocumentSummary> list(
             @RequestParam(value = "status", required = false) final DocumentStatus status,
+            @RequestParam(value = "q", required = false) final String q,
             @PageableDefault(size = 20) final Pageable pageable) {
-        return documentService.list(status, pageable);
+        return documentService.list(status, q, pageable);
     }
 
     @GetMapping("/{id}")
